@@ -4,8 +4,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "DieWithError.h"
 
 #define ECHOMAX 255   /* Longest string to echo */
+#define RCVBUFSIZE 32
+#define SENDBUFSIZE 80
+#define SERVERPORT 4567
 
 void DieWithError(char *errorMessage); /* Error handling function */
 
@@ -16,17 +20,17 @@ int main(int argc, char *argv[])
 	struct sockaddr_in echoServAddr; /* Local address */
 	struct sockaddr_in echoClntAddr; /* Client address */
 	unsigned int cliAddrLen; /* Length of incoming message */
-	char echoBuffer[ECHOMAX]; /* Buffer for echo string */
-	unsigned short echoServPort; /* Server port */
-	int recvMsgSize; /* Size of received message */
+	char echoBuffer[SENDBUFSIZE]; /* Buffer for echo string */
+	char fileBuffer[RCVBUFSIZE];
+	char data[SENDBUFSIZE];
+	int recvMsgSize,totalBytesRcvd,bytesRcvd,n; /* Size of received message */
+	FILE *f;
 
-	if (argc != 2) /* Test for correct number of arguments */
+	if (argc > 1) /* Test for correct number of arguments */
 	{
-		fprintf(stderr, "Usage: %s <Server Port>\n", argv[0]) ;
+		fprintf(stderr, "Usage: %s\n", argv[0]) ;
 		exit(1);
 	}
-
-	echoServPort = atoi(argv[1]); /* First arg: local port */
 
 	/* Create socket for incoming connections */
 	if ((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
@@ -36,7 +40,7 @@ int main(int argc, char *argv[])
 	memset(&echoServAddr, 0, sizeof(echoServAddr)); /* Zero out structure */
 	echoServAddr.sin_family = AF_INET; /* Internet address family */
 	echoServAddr.sin_addr.s_addr = htonl(INADDR_ANY); /* Any incoming interface */
-	echoServAddr.sin_port = htons(echoServPort); /* Local port */
+	echoServAddr.sin_port = htons(SERVERPORT); /* Local port */
 
 	/* Bind to the local address */
 	if (bind(sock, (struct sockaddr *)&echoServAddr, sizeof(echoServAddr)) < 0)
@@ -49,15 +53,38 @@ int main(int argc, char *argv[])
 		cliAddrLen = sizeof(echoClntAddr);
 		
 		/* Block until receive message from a client */
-		if ((recvMsgSize = recvfrom(sock, echoBuffer, ECHOMAX, 0, (struct sockaddr *) &echoClntAddr, &cliAddrLen)) < 0)
+		if ((recvMsgSize = recvfrom(sock, fileBuffer, RCVBUFSIZE, 0, (struct sockaddr *) &echoClntAddr, &cliAddrLen)) < 0)
 			DieWithError("recvfrom() failed") ;
 		
 		
 		printf("Handling client %s\n", inet_ntoa(echoClntAddr.sin_addr));
-		
-		/* Send received datagram back to the client */
-		if (sendto(sock, echoBuffer, recvMsgSize, 0, (struct sockaddr *) &echoClntAddr, sizeof(echoClntAddr)) != recvMsgSize)
-			DieWithError("sendto() sent a different number of bytes than expected");
+		fileBuffer[recvMsgSize-1]='\0';
+		f = fopen(fileBuffer,"r");
+		if (f==NULL)
+		{
+			DieWithError("File doesn't exist");
+		}
+		printf("File opened for reading");
+		n=1;
+		bytesRcvd=0;
+		totalBytesRcvd = 0;
+		while(fgets(data,SENDBUFSIZE,f)!=NULL)
+		{
+			/* Send received datagram back to the client */
+			if ((bytesRcvd=sendto(sock, data, SENDBUFSIZE, 0, (struct sockaddr *) &echoClntAddr, sizeof(echoClntAddr))) == -1)
+			{
+				DieWithError("sendto() failed");
+			}
+
+			totalBytesRcvd += bytesRcvd;
+			printf("Packet %d transmitted with %d date bytes\n",n,bytesRcvd);
+			bzero(data,SENDBUFSIZE);/*Zero out the buffer to make room for more data*/
+			n++;
+		}
+		bytesRcvd=0;
+		printf("End of transmission packet with sequence number %d transmitted with %d data bytes\n",n,bytesRcvd);
+
+		//close(sock);
 }
 /* NOT REACHED */
 }

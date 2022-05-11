@@ -4,10 +4,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "DieWithError.h"
 
-#define ECHOMAX 255 /*Longest string to echo*/
+#define PACKETBUFMAX 80 /*Longest string to echo*/
+#define RCVBUFSIZE 32
+#define PORT 4567 /*Hardcoded port that we will be sending to*/
 
-void DieWithError(char *errorMessage);
 
 int main(int argc, char *argv[])
 {
@@ -17,27 +19,19 @@ int main(int argc, char *argv[])
 	unsigned short echoServPort;
 	unsigned int fromSize;
 	char *servIP;
-	char *echoString;
-	char echoBuffer[ECHOMAX+1];
+	char echoString[RCVBUFSIZE];
+	char fileBuffer[PACKETBUFMAX+1];
 	unsigned int echoStringLen;
-	int respStringLen;
+	int bytesReceived,totalBytesReceived,n;
+	FILE *f;
 
-	if ((argc<3)||(argc>4))
+	if (argc<=1 || argc>2)
 	{
-			fprintf(stderr, "Usage: %s <Server IP> <Echo Word> [<Echo Port>]\n"), argv[0];
-			exit(1);
+		fprintf(stderr, "Usage: ./UDPClient <Server IP>\n"), argv[0];
+		exit(1);
 	}
 
 	servIP = argv[1];
-	echoString = argv[2];
-	
-	if ((echoStringLen = strlen(echoString)) > ECHOMAX) /* Check input length */
-		DieWithError("Echo word too long");
-
-	if(argc == 4)
-		echoServPort = atoi(argv[3]);
-	else
-		echoServPort = 7;
 
 	/* Create a datagram/UDP socket */
 	if((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP))<0)
@@ -47,28 +41,42 @@ int main(int argc, char *argv[])
 	memset(&echoServAddr, 0, sizeof(echoServAddr)); /* Zero out structure */
 	echoServAddr.sin_family = AF_INET;   /* Internet addr family */
 	echoServAddr.sin_addr.s_addr = inet_addr(servIP);   /* Server IP address */
-	echoServAddr.sin_port = htons(echoServPort);  /* Server port */
+	echoServAddr.sin_port = htons(PORT);  /* Server port */
 
+	/*Get the file the user wants*/
+	printf("Enter the file you want: ");
+	fgets(echoString,RCVBUFSIZE,stdin);
+	echoStringLen = strlen(echoString);
+	printf("File name reveived");
 	
-	/*send the string to the server*/
+	/*send the file name to the server*/
 	if (sendto(sock, echoString, echoStringLen, 0, (struct sockaddr *)&echoServAddr, sizeof(echoServAddr))!=echoStringLen)
 		DieWithError("send() sent a different number of bytes than expected");
 
-	/*Receive a response*/
-	fromSize = sizeof(fromAddr);
-	if ((respStringLen = recvfrom(sock, echoBuffer, ECHOMAX, 0, (struct sockaddr *) &fromAddr, &fromSize)) != echoStringLen)
-		DieWithError("recvfrom() failed") ;
-	
-	if (echoServAddr.sin_addr.s_addr != fromAddr.sin_addr.s_addr)
+	/*Receive a response*/	
+	totalBytesReceived=0;
+	n=1;
+	f=fopen("out.txt","w");
+	printf("File opened\n");
+
+	/*While receiving don't stop looping*/
+	while(1)
 	{
-		fprintf(stderr,"Error: received a packet from unknown source.\n");
-		exit(1);
+		/*Recieve data until all data is recieved or error*/
+		if ((bytesReceived = recvfrom(sock, fileBuffer, PACKETBUFMAX, 0, (struct sockaddr *) &echoServAddr, &fromSize)) <= 0)
+		{
+			break;
+		}
+		
+		totalBytesReceived += bytesReceived;
+		fprintf(f,"%s",fileBuffer);
+		printf("Packet %d recieved with %d data bytes\n",n,bytesReceived);
+		/*Zero out the buffer so more data can be sent*/
+		bzero(fileBuffer,PACKETBUFMAX);
+		n++;
 	}
-	
-	
-	/* null-terminate the received data */
-	echoBuffer[respStringLen] = '\0' ;
-	printf("Received: %s\n", echoBuffer); /* Print the echoed arg */
+
+	printf("\n");
 	close(sock);
 	exit(0);
 }

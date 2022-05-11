@@ -3,19 +3,15 @@ CFLAGS=-Wall
 
 all: UDPEchoClient UDPEchoServer
 
-UDPEchoClient :	UDPEchoClient.o	DieWithError.o 
+UDPEchoClient: UDPEchoClient.o
 
-UDPEchoServer :	UDPEchoServer.o	DieWithError.o 
-
-DieWithError.o : DieWithError.c
-				CC -c DieWithError.c
+UDPEchoServer: UDPEchoServer.o
 
 UDPEchoClient.o: UDPEchoClient.c
-				CC -c UDPEchoClient.c
+	$(CC) -c UDPEchoClient.c
 
-UDPEchoSever.o: UDPEchoSever.c 
-				CC -c UDPEchoSever.c
+UDPEchoServer.o: UDPEchoServer.c 
+	$(CC) -c UDPEchoServer.c
 
 clean:
-		rm -f	UDPEchoClient.o	DieWithError.o UDPEchoServer.o UDPEchoClient.exe UDPEchoServer.exe
-				
+	rm -f UDPEchoClient.o UDPEchoServer.o UDPEchoClient UDPEchoServer
