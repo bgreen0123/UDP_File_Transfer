@@ -1,17 +1,17 @@
 CC=gcc
 CFLAGS=-Wall
 
-all: UDPEchoClient UDPEchoServer
+all: UDPClient UDPServer
 
-UDPEchoClient: UDPEchoClient.o
+UDPClient: UDPClient.o
 
-UDPEchoServer: UDPEchoServer.o
+UDPServer: UDPServer.o
 
-UDPEchoClient.o: UDPEchoClient.c
-	$(CC) -c UDPEchoClient.c
+UDPClient.o: UDPClient.c
+	$(CC) -c UDPClient.c
 
-UDPEchoServer.o: UDPEchoServer.c 
-	$(CC) -c UDPEchoServer.c
+UDPServer.o: UDPServer.c 
+	$(CC) -c UDPServer.c
 
 clean:
-	rm -f UDPEchoClient.o UDPEchoServer.o UDPEchoClient UDPEchoServer
+	rm -f UDPClient.o UDPServer.o UDPClient UDPServer out.txt

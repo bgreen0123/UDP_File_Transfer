@@ -14,14 +14,14 @@
 int main(int argc, char *argv[])
 {
 	int sock; /*Socket descriptor*/
-	struct sockaddr_in echoServAddr; /* Echo server address */
+	struct sockaddr_in servAddr; /* Echo server address */
 	struct sockaddr_in fromAddr; /* Source address of echo */
 	unsigned short echoServPort;
-	unsigned int fromSize;
+	unsigned int fromSize = sizeof(fromAddr);
 	char *servIP;
-	char echoString[RCVBUFSIZE];
+	char fileName[RCVBUFSIZE];
 	char fileBuffer[PACKETBUFMAX+1];
-	unsigned int echoStringLen;
+	unsigned int fileNameLen;
 	int bytesReceived,totalBytesReceived,n;
 	FILE *f;
 
@@ -38,19 +38,19 @@ int main(int argc, char *argv[])
 		DieWithError("socket() failed");
 
 	/*Construct the server address structure*/
-	memset(&echoServAddr, 0, sizeof(echoServAddr)); /* Zero out structure */
-	echoServAddr.sin_family = AF_INET;   /* Internet addr family */
-	echoServAddr.sin_addr.s_addr = inet_addr(servIP);   /* Server IP address */
-	echoServAddr.sin_port = htons(PORT);  /* Server port */
+	memset(&servAddr, 0, sizeof(servAddr)); /* Zero out structure */
+	servAddr.sin_family = AF_INET;   /* Internet addr family */
+	servAddr.sin_addr.s_addr = inet_addr(servIP);   /* Server IP address */
+	servAddr.sin_port = htons(PORT);  /* Server port */
 
 	/*Get the file the user wants*/
 	printf("Enter the file you want: ");
-	fgets(echoString,RCVBUFSIZE,stdin);
-	echoStringLen = strlen(echoString);
+	fgets(fileName,RCVBUFSIZE,stdin);
+	fileNameLen = strlen(fileName);
 	printf("File name reveived");
 	
 	/*send the file name to the server*/
-	if (sendto(sock, echoString, echoStringLen, 0, (struct sockaddr *)&echoServAddr, sizeof(echoServAddr))!=echoStringLen)
+	if (sendto(sock, fileName, fileNameLen, 0, (struct sockaddr *)&servAddr, sizeof(servAddr))!=fileNameLen)
 		DieWithError("send() sent a different number of bytes than expected");
 
 	/*Receive a response*/	
@@ -63,20 +63,26 @@ int main(int argc, char *argv[])
 	while(1)
 	{
 		/*Recieve data until all data is recieved or error*/
-		if ((bytesReceived = recvfrom(sock, fileBuffer, PACKETBUFMAX, 0, (struct sockaddr *) &echoServAddr, &fromSize)) <= 0)
+		if((bytesReceived = recvfrom(sock, fileBuffer, PACKETBUFMAX, 0, (struct sockaddr *) &fromAddr, &fromSize)) <=0)
 		{
-			break;
-		}
-		
-		totalBytesReceived += bytesReceived;
-		fprintf(f,"%s",fileBuffer);
-		printf("Packet %d recieved with %d data bytes\n",n,bytesReceived);
-		/*Zero out the buffer so more data can be sent*/
-		bzero(fileBuffer,PACKETBUFMAX);
-		n++;
-	}
+			if(bytesReceived == -1)
+			{
+				DieWithError("recvfrom() failed");
+			}
 
-	printf("\n");
-	close(sock);
-	exit(0);
+			printf("Tranfer finished");
+			fclose(f);
+			close(sock);
+			exit(0);
+		}
+		else
+		{
+			totalBytesReceived += bytesReceived;
+			fileBuffer[bytesReceived] = '\0';
+			fputs(fileBuffer,f);
+			printf("Packet %d recieved with %d data bytes\n",n,bytesReceived);
+			bzero(fileBuffer,PACKETBUFMAX);/*Zero out buffer so that more data can be received*/
+			n++;/*Increase the packet count*/
+		}
+	}
 }
