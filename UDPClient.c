@@ -10,6 +10,11 @@
 #define RCVBUFSIZE 32
 #define PORT 4567 /*Hardcoded port that we will be sending to*/
 
+typedef struct{
+	int count;
+	int seq_num;
+	char data[PACKETBUFMAX];
+}Frame;
 
 int main(int argc, char *argv[])
 {
@@ -24,6 +29,10 @@ int main(int argc, char *argv[])
 	unsigned int fileNameLen;
 	int bytesReceived,totalBytesReceived,n;
 	FILE *f;
+
+	Frame send;
+	Frame recv;
+	int ack = 0;
 
 	if (argc<=1 || argc>2)
 	{
@@ -48,12 +57,15 @@ int main(int argc, char *argv[])
 	fgets(fileName,RCVBUFSIZE,stdin);
 	fileNameLen = strlen(fileName);
 	printf("File name reveived");
+	send.count = fileNameLen;
+	send.seq_num = 0;
+	strcpy(send.data,fileName);
 	
 	/*send the file name to the server*/
-	if (sendto(sock, fileName, fileNameLen, 0, (struct sockaddr *)&servAddr, sizeof(servAddr))!=fileNameLen)
+	if (sendto(sock, &send, sizeof(Frame), 0, (struct sockaddr *)&servAddr, sizeof(servAddr))!=sizeof(Frame))
 		DieWithError("send() sent a different number of bytes than expected");
 
-	/*Receive a response*/	
+	/*Receive a response*/
 	totalBytesReceived=0;
 	n=1;
 	f=fopen("out.txt","w");
@@ -63,7 +75,8 @@ int main(int argc, char *argv[])
 	while(1)
 	{
 		/*Recieve data until all data is recieved or error*/
-		if((bytesReceived = recvfrom(sock, fileBuffer, PACKETBUFMAX, 0, (struct sockaddr *) &fromAddr, &fromSize)) <=0)
+		bytesReceived = recvfrom(sock, &recv, sizeof(Frame), 0, (struct sockaddr *) &fromAddr, &fromSize);
+		if(recv.count == 0 || bytesReceived == -1)
 		{
 			if(bytesReceived == -1)
 			{
@@ -77,11 +90,11 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			totalBytesReceived += bytesReceived;
-			fileBuffer[bytesReceived] = '\0';
-			fputs(fileBuffer,f);
-			printf("Packet %d recieved with %d data bytes\n",n,bytesReceived);
-			bzero(fileBuffer,PACKETBUFMAX);/*Zero out buffer so that more data can be received*/
+			totalBytesReceived += recv.count;
+			recv.data[recv.count] = '\0';
+			fputs(recv.data,f);
+			printf("Packet %d recieved with %d data bytes\n",n,recv.count);
+			bzero(recv.data,PACKETBUFMAX);/*Zero out buffer so that more data can be received*/
 			n++;/*Increase the packet count*/
 		}
 	}
