@@ -16,6 +16,21 @@ typedef struct{
 	char data[SENDBUFSIZE];
 }Frame;
 
+typedef struct{
+	int ack_seq_num;
+}Ack;
+
+int transmit(Frame frame, Ack ack, int sock, struct sockaddr_in clntAddr){
+	int bytesSent;
+
+	if((bytesSent = sendto(sock, &frame, sizeof(Frame), 0, (struct sockaddr *) &clntAddr, sizeof(clntAddr))) == -1)
+	{
+		DieWithError("sendto() failed");
+	}
+
+	return bytesSent;
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -26,12 +41,13 @@ int main(int argc, char *argv[])
 	char echoBuffer[SENDBUFSIZE]; /* Buffer for echo string */
 	char fileBuffer[RCVBUFSIZE];
 	char data[SENDBUFSIZE];
-	int recvFileNameSize,totalBytesSent,bytesSent,n; /* Size of received message */
+	int recvFileNameSize,totalBytesSent,bytesSent,n,timeout,lost; /* Size of received message */
 	FILE *f;
 
 	Frame send;
 	Frame recv;
-	int ack = 0;
+	Ack ack;
+	ack.ack_seq_num = 1;
 
 
 	if (argc > 1) /* Test for correct number of arguments */
@@ -77,26 +93,41 @@ int main(int argc, char *argv[])
 		totalBytesSent = 0;
 		while(fgets(send.data,SENDBUFSIZE,f) != NULL)
 		{
-			printf("Packet %d generated for transmission with %d data bytes\n",n,send.count);
-			
+			send.seq_num = ack.ack_seq_num;
 			send.count = strlen(send.data);
-			/* Send received datagram back to the client */
-			if((bytesSent = sendto(sock, &send, sizeof(Frame), 0, (struct sockaddr *) &clntAddr, sizeof(clntAddr))) == -1)
+
+			printf("Packet %d with seq num %d generated for transmission with %d data bytes\n",n,send.seq_num,send.count);
+			
+			/* Send data bytes back to the client */
+			bytesSent = transmit(send,ack,sock,clntAddr);
+			printf("Packet %d successfully transmitted with %d data bytes\n\n",n,send.count);
+			/*Wait for the ACK using a timeout period of 5 seconds*/
+			while(timeout != 5)
 			{
-				DieWithError("sendto() failed");
-				
+				printf("Waiting...\n");
+				if(recvfrom(sock, &ack, sizeof(Ack), MSG_DONTWAIT, (struct sockaddr *) &clntAddr, &clntAddrLen))
+				{
+					break;
+				}
+
+				sleep(1);
+
+				if((timeout++) == 5)
+				{
+					bytesSent = transmit(send,ack,sock,clntAddr); /*retransmit and set the timer back to 0*/
+					timeout = 0;
+				}
+
 			}
-			else
-			{
-				totalBytesSent += send.count;
-				printf("Packet %d successfully transmitted with %d date bytes\n",n,send.count);
-				bzero(data,SENDBUFSIZE);/*Zero out the buffer to make room for more data*/
-				n++;
-			}
+
+			printf("ACK %d with seq num %d received\n\n",n,ack.ack_seq_num);
+			bzero(data,SENDBUFSIZE);/*Zero out the buffer to make room for more data*/
+			totalBytesSent+=bytesSent;
+			n++;
 		}
 		send.count = 0;
 		sendto(sock,&send,sizeof(Frame),0,(struct sockaddr *) &clntAddr, sizeof(clntAddr)); /*Send last packet with no bytes to end transmission*/
-		printf("End of transmission packet with sequence number %d transmitted with %d data bytes\n",n,bytesSent);
+		printf("End of transmission packet with sequence number %d transmitted with %d data bytes\n",n,send.count);
 	}
 /* NOT REACHED BECAUSE THE SERVER IS ALWAYS LISTENING*/
 }

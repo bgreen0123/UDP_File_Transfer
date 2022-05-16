@@ -16,6 +16,10 @@ typedef struct{
 	char data[PACKETBUFMAX];
 }Frame;
 
+typedef struct{
+	int ack_seq_num;
+}Ack;
+
 int main(int argc, char *argv[])
 {
 	int sock; /*Socket descriptor*/
@@ -32,7 +36,7 @@ int main(int argc, char *argv[])
 
 	Frame send;
 	Frame recv;
-	int ack = 0;
+	Ack ack;
 
 	if (argc<=1 || argc>2)
 	{
@@ -83,7 +87,7 @@ int main(int argc, char *argv[])
 				DieWithError("recvfrom() failed");
 			}
 
-			printf("Tranfer finished");
+			printf("End of Transmission packet with sequence number %d received",recv.seq_num);
 			fclose(f);
 			close(sock);
 			exit(0);
@@ -91,11 +95,23 @@ int main(int argc, char *argv[])
 		else
 		{
 			totalBytesReceived += recv.count;
+			printf("Packet %d recieved with %d data bytes\n",n,recv.count);
 			recv.data[recv.count] = '\0';
 			fputs(recv.data,f);
-			printf("Packet %d recieved with %d data bytes\n",n,recv.count);
+			printf("Packet %d delivered to user\n\n",n);
 			bzero(recv.data,PACKETBUFMAX);/*Zero out buffer so that more data can be received*/
 			n++;/*Increase the packet count*/
+			if(recv.seq_num == 0)
+			{
+				ack.ack_seq_num = 1;
+			}
+			else
+			{
+				ack.ack_seq_num = 0;
+			}
+			printf("ACK %d generated for transmission\n",n);
+			sendto(sock, &ack, sizeof(Ack), 0, (struct sockaddr *) &servAddr, sizeof(servAddr));
+			printf("ACK %d successfully transmitted\n\n",n);
 		}
 	}
 }
